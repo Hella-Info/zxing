@@ -49,6 +49,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -56,9 +57,6 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.imageio.ImageIO;
@@ -84,7 +82,6 @@ public final class DecodeServlet extends HttpServlet {
   // No real reason to deal with more than maybe 2 megapixels
   private static final int MAX_PIXELS = 1 << 21;
   private static final byte[] REMAINDER_BUFFER = new byte[8192];
-  private static final long GC_HACK_INTERVAL_MS = 60 * 1000;
   private static final Map<DecodeHintType,Object> HINTS;
   private static final Map<DecodeHintType,Object> HINTS_PURE;
 
@@ -97,21 +94,12 @@ public final class DecodeServlet extends HttpServlet {
   }
 
   private DiskFileItemFactory diskFileItemFactory;
-  private Timer gcHackTimer;
 
   @Override
   public void init(ServletConfig servletConfig) {
     Logger logger = Logger.getLogger("com.google.zxing");
     logger.addHandler(new ServletContextLogHandler(servletConfig.getServletContext()));
-    gcHackTimer = new Timer();
-    gcHackTimer.schedule(new TimerTask() {
-      @Override
-      public void run() {
-        System.gc(); // Hack: GC may close these weird stuck CLOSE_WAIT sockets?
-      }
-    }, GC_HACK_INTERVAL_MS, GC_HACK_INTERVAL_MS);
     diskFileItemFactory = new DiskFileItemFactory();
-    log.info("DecodeServlet configured");
   }
 
   @Override
@@ -120,7 +108,7 @@ public final class DecodeServlet extends HttpServlet {
 
     String imageURIString = request.getParameter("u");
     if (imageURIString == null || imageURIString.isEmpty()) {
-      log.fine("URI was empty");
+      log.info("URI was empty");
       response.sendRedirect("badurl.jspx");
       return;
     }
@@ -135,15 +123,11 @@ public final class DecodeServlet extends HttpServlet {
     try {
       imageURL = new URI(imageURIString).toURL();
     } catch (URISyntaxException urise) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine("URI was not valid: " + imageURIString);
-      }
+      log.info("URI was not valid: " + imageURIString);
       response.sendRedirect("badurl.jspx");
       return;
     } catch (MalformedURLException mue) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine("URI was not valid: " + imageURIString);
-      }
+      log.info("URI was not valid: " + imageURIString);
       response.sendRedirect("badurl.jspx");
       return;
     }
@@ -152,9 +136,7 @@ public final class DecodeServlet extends HttpServlet {
     try {
       connection = (HttpURLConnection) imageURL.openConnection();
     } catch (IllegalArgumentException iae) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine("URI could not be opened: " + imageURL);
-      }
+      log.info("URI could not be opened: " + imageURL);
       response.sendRedirect("badurl.jspx");
       return;
     }
@@ -175,9 +157,7 @@ public final class DecodeServlet extends HttpServlet {
         //  javax.net.ssl.SSLPeerUnverifiedException,
         //  org.apache.http.NoHttpResponseException,
         //  org.apache.http.client.ClientProtocolException,
-        if (log.isLoggable(Level.FINE)) {
-          log.fine(ioe.toString());
-        }
+        log.info(ioe.toString());
         response.sendRedirect("badurl.jspx");
         return;
       }
@@ -188,14 +168,12 @@ public final class DecodeServlet extends HttpServlet {
         is = connection.getInputStream();
 
         if (connection.getResponseCode() != HttpServletResponse.SC_OK) {
-          if (log.isLoggable(Level.FINE)) {
-            log.fine("Unsuccessful return code: " + connection.getResponseCode());
-          }
+          log.info("Unsuccessful return code: " + connection.getResponseCode());
           response.sendRedirect("badurl.jspx");
           return;
         }
         if (connection.getHeaderFieldInt("Content-Length", 0) > MAX_IMAGE_SIZE) {
-          log.fine("Too large");
+          log.info("Too large");
           response.sendRedirect("badimage.jspx");
           return;
         }
@@ -204,9 +182,7 @@ public final class DecodeServlet extends HttpServlet {
         processStream(is, request, response);
 
       } catch (IOException ioe) {
-        if (log.isLoggable(Level.FINE)) {
-          log.fine(ioe.toString());
-        }
+        log.info(ioe.toString());
         response.sendRedirect("badurl.jspx");
       } finally {
         if (is != null) {
@@ -239,7 +215,7 @@ public final class DecodeServlet extends HttpServlet {
       throws ServletException, IOException {
 
     if (!ServletFileUpload.isMultipartContent(request)) {
-      log.fine("File upload was not multipart");
+      log.info("File upload was not multipart");
       response.sendRedirect("badimage.jspx");
       return;
     }
@@ -260,16 +236,14 @@ public final class DecodeServlet extends HttpServlet {
               is.close();
             }
           } else {
-            log.fine("Too large");
+            log.info("Too large");
             response.sendRedirect("badimage.jspx");
           }
           break;
         }
       }
     } catch (FileUploadException fue) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine(fue.toString());
-      }
+      log.info(fue.toString());
       response.sendRedirect("badimage.jspx");
     }
 
@@ -283,23 +257,17 @@ public final class DecodeServlet extends HttpServlet {
     try {
       image = ImageIO.read(is);
     } catch (IOException ioe) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine(ioe.toString());
-      }
+      log.info(ioe.toString());
       // Includes javax.imageio.IIOException
       response.sendRedirect("badimage.jspx");
       return;
     } catch (CMMException cmme) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine(cmme.toString());
-      }
+      log.info(cmme.toString());
       // Have seen this in logs
       response.sendRedirect("badimage.jspx");
       return;
     } catch (IllegalArgumentException iae) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine(iae.toString());
-      }
+      log.info(iae.toString());
       // Have seen this in logs for some JPEGs
       response.sendRedirect("badimage.jspx");
       return;
@@ -310,9 +278,7 @@ public final class DecodeServlet extends HttpServlet {
     }
     if (image.getHeight() <= 1 || image.getWidth() <= 1 ||
         image.getHeight() * image.getWidth() > MAX_PIXELS) {
-      if (log.isLoggable(Level.FINE)) {
-        log.fine("Dimensions too large: " + image.getWidth() + 'x' + image.getHeight());
-      }
+      log.info("Dimensions too large: " + image.getWidth() + 'x' + image.getHeight());
       response.sendRedirect("badimage.jspx");
       return;
     }
@@ -376,10 +342,12 @@ public final class DecodeServlet extends HttpServlet {
       return;
     }
 
-    if (request.getParameter("full") == null) {
+    String fullParameter = request.getParameter("full");
+    boolean minimalOutput = fullParameter != null && !Boolean.parseBoolean(fullParameter);
+    if (minimalOutput) {
       response.setContentType("text/plain");
       response.setCharacterEncoding("UTF8");
-      Writer out = new OutputStreamWriter(response.getOutputStream(), "UTF8");
+      Writer out = new OutputStreamWriter(response.getOutputStream(), Charset.forName("UTF-8"));
       try {
         for (Result result : results) {
           out.write(result.getText());
@@ -408,12 +376,6 @@ public final class DecodeServlet extends HttpServlet {
       log.info("Unknown problem: " + re);
       response.sendRedirect("notfound.jspx");
     }
-  }
-
-  @Override
-  public void destroy() {
-    log.config("DecodeServlet shutting down...");
-    gcHackTimer.cancel();
   }
 
 }
