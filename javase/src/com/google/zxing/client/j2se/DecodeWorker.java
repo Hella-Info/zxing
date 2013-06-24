@@ -137,16 +137,7 @@ final class DecodeWorker implements Callable<Integer> {
   }
 
   private Result decode(URI uri, Map<DecodeHintType,?> hints) throws IOException {
-    BufferedImage image;
-    try {
-      image = ImageIO.read(uri.toURL());
-    } catch (IllegalArgumentException iae) {
-      throw new FileNotFoundException("Resource not found: " + uri);
-    }
-    if (image == null) {
-      System.err.println(uri.toString() + ": Could not load image");
-      return null;
-    }
+    BufferedImage image = ImageReader.readImage(uri);
     try {
       LuminanceSource source;
       if (config.getCrop() == null) {
@@ -171,28 +162,21 @@ final class DecodeWorker implements Callable<Integer> {
         System.out.println("Found " + result.getResultPoints().length + " result points.");
         for (int i = 0; i < result.getResultPoints().length; i++) {
           ResultPoint rp = result.getResultPoints()[i];
-          System.out.println("  Point " + i + ": (" + rp.getX() + ',' + rp.getY() + ')');
+          if (rp != null) {
+            System.out.println("  Point " + i + ": (" + rp.getX() + ',' + rp.getY() + ')');
+          }
         }
       }
 
       return result;
-    } catch (NotFoundException nfe) {
+    } catch (NotFoundException ignored) {
       System.out.println(uri.toString() + ": No barcode found");
       return null;
     }
   }
 
   private Result[] decodeMulti(URI uri, Map<DecodeHintType,?> hints) throws IOException {
-    BufferedImage image;
-    try {
-      image = ImageIO.read(uri.toURL());
-    } catch (IllegalArgumentException iae) {
-      throw new FileNotFoundException("Resource not found: " + uri);
-    }
-    if (image == null) {
-      System.err.println(uri.toString() + ": Could not load image");
-      return null;
-    }
+    BufferedImage image = ImageReader.readImage(uri);
     try {
       LuminanceSource source;
       if (config.getCrop() == null) {
@@ -229,7 +213,7 @@ final class DecodeWorker implements Callable<Integer> {
         }
       }
       return results;
-    } catch (NotFoundException nfe) {
+    } catch (NotFoundException ignored) {
       System.out.println(uri.toString() + ": No barcode found");
       return null;
     }
@@ -296,7 +280,8 @@ final class DecodeWorker implements Callable<Integer> {
           }
         }
       }
-    } catch (NotFoundException nfe) {
+    } catch (NotFoundException ignored) {
+      // continue
     }
 
     writeResultImage(stride, height, pixels, uri, inputName, ".mono.png");
@@ -331,9 +316,9 @@ final class DecodeWorker implements Callable<Integer> {
       if (!ImageIO.write(result, "png", outStream)) {
         System.err.println("Could not encode an image to " + resultName);
       }
-    } catch (FileNotFoundException e) {
+    } catch (FileNotFoundException ignored) {
       System.err.println("Could not create " + resultName);
-    } catch (IOException e) {
+    } catch (IOException ignored) {
       System.err.println("Could not write to " + resultName);
     } finally {
       try {

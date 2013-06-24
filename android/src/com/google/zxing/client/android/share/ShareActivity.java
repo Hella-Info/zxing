@@ -98,7 +98,7 @@ public final class ShareActivity extends Activity {
     public boolean onKey(View view, int keyCode, KeyEvent event) {
       if (keyCode == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN) {
         String text = ((TextView) view).getText().toString();
-        if (text != null && text.length() > 0) {
+        if (text != null && !text.isEmpty()) {
           launchSearch(text);
         }
         return true;
@@ -177,13 +177,12 @@ public final class ShareActivity extends Activity {
       return; // Show error?
     }
     ContentResolver resolver = getContentResolver();
-    Bundle bundle = new Bundle();
 
     Cursor cursor;
     try {
       // We're seeing about six reports a week of this exception although I don't understand why.
       cursor = resolver.query(contactUri, null, null, null, null);
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException ignored) {
       return;
     }
     if (cursor == null) {
@@ -208,7 +207,8 @@ public final class ShareActivity extends Activity {
     }
 
     // Don't require a name to be present, this contact might be just a phone number.
-    if (name != null && name.length() > 0) {
+    Bundle bundle = new Bundle();
+    if (name != null && !name.isEmpty()) {
       bundle.putString(ContactsContract.Intents.Insert.NAME, massageContactData(name));
     }
 
@@ -224,7 +224,7 @@ public final class ShareActivity extends Activity {
           int phonesNumberColumn = phonesCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
           while (phonesCursor.moveToNext() && foundPhone < Contents.PHONE_KEYS.length) {
             String number = phonesCursor.getString(phonesNumberColumn);
-            if (number != null && number.length() > 0) {
+            if (number != null && !number.isEmpty()) {
               bundle.putString(Contents.PHONE_KEYS[foundPhone], massageContactData(number));
             }
             foundPhone++;
@@ -245,7 +245,7 @@ public final class ShareActivity extends Activity {
         if (methodsCursor.moveToNext()) {
           String data = methodsCursor.getString(
               methodsCursor.getColumnIndex(ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS));
-          if (data != null && data.length() > 0) {
+          if (data != null && !data.isEmpty()) {
             bundle.putString(ContactsContract.Intents.Insert.POSTAL, massageContactData(data));
           }
         }
@@ -265,7 +265,7 @@ public final class ShareActivity extends Activity {
         int emailColumn = emailCursor.getColumnIndex(ContactsContract.CommonDataKinds.Email.DATA);
         while (emailCursor.moveToNext() && foundEmail < Contents.EMAIL_KEYS.length) {
           String email = emailCursor.getString(emailColumn);
-          if (email != null && email.length() > 0) {
+          if (email != null && !email.isEmpty()) {
             bundle.putString(Contents.EMAIL_KEYS[foundEmail], massageContactData(email));
           }
           foundEmail++;

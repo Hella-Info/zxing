@@ -23,13 +23,12 @@
 #include <zxing/ResultPoint.h>
 #include <zxing/common/GridSampler.h>
 #include <zxing/datamatrix/detector/Detector.h>
-#include <zxing/common/detector/math_utils.h>
+#include <zxing/common/detector/MathUtils.h>
 #include <zxing/NotFoundException.h>
 #include <sstream>
 #include <cstdlib>
 
-namespace math_utils = zxing::common::detector::math_utils;
-
+using std::abs;
 using zxing::Ref;
 using zxing::BitMatrix;
 using zxing::ResultPoint;
@@ -38,6 +37,7 @@ using zxing::PerspectiveTransform;
 using zxing::NotFoundException;
 using zxing::datamatrix::Detector;
 using zxing::datamatrix::ResultPointsAndTransitions;
+using zxing::common::detector::MathUtils;
 
 namespace {
   typedef std::map<Ref<ResultPoint>, int> PointMap;
@@ -245,7 +245,7 @@ Ref<DetectorResult> Detector::detect() {
     bits = sampleGrid(image_, dimensionCorrected, dimensionCorrected, transform);
   }
 
-  std::vector<Ref<ResultPoint> > points(4);
+  ArrayRef< Ref<ResultPoint> > points (new Array< Ref<ResultPoint> >(4));
   points[0].reset(topLeft);
   points[1].reset(bottomLeft);
   points[2].reset(correctedTopRight);
@@ -346,7 +346,7 @@ bool Detector::isValid(Ref<ResultPoint> p) {
 }
 
 int Detector::distance(Ref<ResultPoint> a, Ref<ResultPoint> b) {
-  return math_utils::round(ResultPoint::distance(a, b));
+  return MathUtils::round(ResultPoint::distance(a, b));
 }
 
 Ref<ResultPointsAndTransitions> Detector::transitionsBetween(Ref<ResultPoint> from,

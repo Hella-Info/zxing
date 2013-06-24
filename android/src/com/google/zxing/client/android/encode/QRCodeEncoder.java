@@ -112,20 +112,20 @@ final class QRCodeEncoder {
     }
     if (format == null || format == BarcodeFormat.QR_CODE) {
       String type = intent.getStringExtra(Intents.Encode.TYPE);
-      if (type == null || type.length() == 0) {
+      if (type == null || type.isEmpty()) {
         return false;
       }
       this.format = BarcodeFormat.QR_CODE;
       encodeQRCodeContents(intent, type);
     } else {
       String data = intent.getStringExtra(Intents.Encode.DATA);
-      if (data != null && data.length() > 0) {
+      if (data != null && !data.isEmpty()) {
         contents = data;
         displayContents = data;
         title = activity.getString(R.string.contents_text);
       }
     }
-    return contents != null && contents.length() > 0;
+    return contents != null && !contents.isEmpty();
   }
 
   // Handles send intents from multitude of Android applications
@@ -158,7 +158,7 @@ final class QRCodeEncoder {
     }
 
     // Trim text to avoid URL breaking.
-    if (theContents == null || theContents.length() == 0) {
+    if (theContents == null || theContents.isEmpty()) {
       throw new WriterException("Empty EXTRA_TEXT");
     }
     contents = theContents;
@@ -181,7 +181,7 @@ final class QRCodeEncoder {
     if (bundle == null) {
       throw new WriterException("No extras");
     }
-    Uri uri = (Uri) bundle.getParcelable(Intent.EXTRA_STREAM);
+    Uri uri = bundle.getParcelable(Intent.EXTRA_STREAM);
     if (uri == null) {
       throw new WriterException("No EXTRA_STREAM");
     }
@@ -208,7 +208,7 @@ final class QRCodeEncoder {
       throw new WriterException("Result was not an address");
     }
     encodeQRCodeContents((AddressBookParsedResult) parsedResult);
-    if (contents == null || contents.length() == 0) {
+    if (contents == null || contents.isEmpty()) {
       throw new WriterException("No content to encode");
     }
   }
@@ -216,7 +216,7 @@ final class QRCodeEncoder {
   private void encodeQRCodeContents(Intent intent, String type) {
     if (type.equals(Contents.Type.TEXT)) {
       String data = intent.getStringExtra(Intents.Encode.DATA);
-      if (data != null && data.length() > 0) {
+      if (data != null && !data.isEmpty()) {
         contents = data;
         displayContents = data;
         title = activity.getString(R.string.contents_text);
@@ -259,6 +259,7 @@ final class QRCodeEncoder {
           emails.add(bundle.getString(Contents.EMAIL_KEYS[x]));
         }
         String url = bundle.getString(Contents.URL_KEY);
+        Collection<String> urls = url == null ? null : Collections.singletonList(url);
         String note = bundle.getString(Contents.NOTE_KEY);
 
         ContactEncoder mecardEncoder = useVCard ? new VCardContactEncoder() : new MECARDContactEncoder();
@@ -267,10 +268,10 @@ final class QRCodeEncoder {
                                                 Collections.singleton(address),
                                                 phones,
                                                 emails,
-                                                url,
+                                                urls,
                                                 note);
         // Make sure we've encoded at least one field.
-        if (encoded[1].length() > 0) {
+        if (!encoded[1].isEmpty()) {
           contents = encoded[0];
           displayContents = encoded[1];
           title = activity.getString(R.string.contents_contact);
@@ -300,10 +301,10 @@ final class QRCodeEncoder {
                                       toIterable(contact.getAddresses()),
                                       toIterable(contact.getPhoneNumbers()),
                                       toIterable(contact.getEmails()),
-                                      contact.getURL(),
+                                      toIterable(contact.getURLs()),
                                       null);
     // Make sure we've encoded at least one field.
-    if (encoded[1].length() > 0) {
+    if (!encoded[1].isEmpty()) {
       contents = encoded[0];
       displayContents = encoded[1];
       title = activity.getString(R.string.contents_contact);
@@ -325,10 +326,9 @@ final class QRCodeEncoder {
       hints = new EnumMap<EncodeHintType,Object>(EncodeHintType.class);
       hints.put(EncodeHintType.CHARACTER_SET, encoding);
     }
-    MultiFormatWriter writer = new MultiFormatWriter();
     BitMatrix result;
     try {
-      result = writer.encode(contentsToEncode, format, dimension, dimension, hints);
+      result = new MultiFormatWriter().encode(contentsToEncode, format, dimension, dimension, hints);
     } catch (IllegalArgumentException iae) {
       // Unsupported format
       return null;

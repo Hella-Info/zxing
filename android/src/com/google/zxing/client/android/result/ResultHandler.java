@@ -41,6 +41,8 @@ import android.provider.ContactsContract;
 import android.util.Log;
 import android.view.View;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.Collection;
 import java.util.Locale;
 
@@ -203,14 +205,15 @@ public abstract class ResultHandler {
   }
 
   final void addPhoneOnlyContact(String[] phoneNumbers,String[] phoneTypes) {
-    addContact(null, null, phoneNumbers, phoneTypes, null, null, null, null, null, null, null, null, null, null);
+    addContact(null, null, null, phoneNumbers, phoneTypes, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   final void addEmailOnlyContact(String[] emails, String[] emailTypes) {
-    addContact(null, null, null, null, emails, emailTypes, null, null, null, null, null, null, null, null);
+    addContact(null, null, null, null, null, emails, emailTypes, null, null, null, null, null, null, null, null, null);
   }
 
   final void addContact(String[] names,
+                        String[] nicknames,
                         String pronunciation,
                         String[] phoneNumbers,
                         String[] phoneTypes,
@@ -222,8 +225,9 @@ public abstract class ResultHandler {
                         String addressType,
                         String org,
                         String title,
-                        String url,
-                        String birthday) {
+                        String[] urls,
+                        String birthday,
+                        String[] geo) {
 
     // Only use the first name in the array, if present.
     Intent intent = new Intent(Intent.ACTION_INSERT_OR_EDIT, ContactsContract.Contacts.CONTENT_URI);
@@ -256,16 +260,32 @@ public abstract class ResultHandler {
 
     // No field for URL, birthday; use notes
     StringBuilder aggregatedNotes = new StringBuilder();
-    for (String aNote : new String[] { url, birthday, note }) {
-      if (aNote != null) {
-        if (aggregatedNotes.length() > 0) {
-          aggregatedNotes.append('\n');
+    if (urls != null) {
+      for (String url : urls) {
+        if (url != null && !url.isEmpty()) {
+          aggregatedNotes.append('\n').append(url);
         }
-        aggregatedNotes.append(aNote);
       }
     }
+    for (String aNote : new String[] { birthday, note }) {
+      if (aNote != null) {
+        aggregatedNotes.append('\n').append(aNote);
+      }
+    }
+    if (nicknames != null) {
+      for (String nickname : nicknames) {
+        if (nickname != null && !nickname.isEmpty()) {
+          aggregatedNotes.append('\n').append(nickname);
+        }
+      }
+    }
+    if (geo != null) {
+      aggregatedNotes.append('\n').append(geo[0]).append(',').append(geo[1]);
+    }
+
     if (aggregatedNotes.length() > 0) {
-      putExtra(intent, ContactsContract.Intents.Insert.NOTES, aggregatedNotes.toString());
+      // Remove extra leading '\n'
+      putExtra(intent, ContactsContract.Intents.Insert.NOTES, aggregatedNotes.substring(1));
     }
     
     putExtra(intent, ContactsContract.Intents.Insert.IM_HANDLE, instantMessenger);
@@ -351,7 +371,7 @@ public abstract class ResultHandler {
   final void sendMMSFromUri(String uri, String subject, String body) {
     Intent intent = new Intent(Intent.ACTION_SENDTO, Uri.parse(uri));
     // The Messaging app needs to see a valid subject or else it will treat this an an SMS.
-    if (subject == null || subject.length() == 0) {
+    if (subject == null || subject.isEmpty()) {
       putExtra(intent, "subject", activity.getString(R.string.msg_default_mms_subject));
     } else {
       putExtra(intent, "subject", subject);
@@ -379,9 +399,9 @@ public abstract class ResultHandler {
    * @param address The address to find
    * @param title An optional title, e.g. the name of the business at this address
    */
-  final void searchMap(String address, CharSequence title) {
+  final void searchMap(String address, String title) {
     String query = address;
-    if (title != null && title.length() > 0) {
+    if (title != null && !title.isEmpty()) {
       query += " (" + title + ')';
     }
     launchIntent(new Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(query))));
@@ -423,7 +443,7 @@ public abstract class ResultHandler {
     Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
     try {
       launchIntent(intent);
-    } catch (ActivityNotFoundException anfe) {
+    } catch (ActivityNotFoundException ignored) {
       Log.w(TAG, "Nothing available to handle " + intent);
     }
   }
@@ -480,7 +500,7 @@ public abstract class ResultHandler {
   final void launchIntent(Intent intent) {
     try {
       rawLaunchIntent(intent);
-    } catch (ActivityNotFoundException e) {
+    } catch (ActivityNotFoundException ignored) {
       AlertDialog.Builder builder = new AlertDialog.Builder(activity);
       builder.setTitle(R.string.app_name);
       builder.setMessage(R.string.msg_intent_failed);
@@ -490,7 +510,7 @@ public abstract class ResultHandler {
   }
 
   private static void putExtra(Intent intent, String key, String value) {
-    if (value != null && value.length() > 0) {
+    if (value != null && !value.isEmpty()) {
       intent.putExtra(key, value);
     }
   }
@@ -499,7 +519,7 @@ public abstract class ResultHandler {
     SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(activity);
     String customProductSearch = prefs.getString(PreferencesActivity.KEY_CUSTOM_PRODUCT_SEARCH,
         null);
-    if (customProductSearch != null && customProductSearch.trim().length() == 0) {
+    if (customProductSearch != null && customProductSearch.trim().isEmpty()) {
       return null;
     }
     return customProductSearch;
@@ -508,6 +528,11 @@ public abstract class ResultHandler {
   final String fillInCustomSearchURL(String text) {
     if (customProductSearch == null) {
       return text; // ?
+    }
+    try {
+      text = URLEncoder.encode(text, "UTF-8");
+    } catch (UnsupportedEncodingException e) {
+      // can't happen; UTF-8 is always supported. Continue, I guess, without encoding      
     }
     String url = customProductSearch.replace("%s", text);
     if (rawResult != null) {

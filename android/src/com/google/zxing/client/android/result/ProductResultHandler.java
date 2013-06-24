@@ -18,6 +18,7 @@ package com.google.zxing.client.android.result;
 
 import com.google.zxing.Result;
 import com.google.zxing.client.android.R;
+import com.google.zxing.client.result.ExpandedProductParsedResult;
 import com.google.zxing.client.result.ParsedResult;
 import com.google.zxing.client.result.ProductParsedResult;
 
@@ -41,8 +42,7 @@ public final class ProductResultHandler extends ResultHandler {
     showGoogleShopperButton(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
-        ProductParsedResult productResult = (ProductParsedResult) getResult();
-        openGoogleShopper(productResult.getNormalizedProductID());
+        openGoogleShopper(getProductIDFromResult(getResult()));
       }
     });
   }
@@ -59,18 +59,28 @@ public final class ProductResultHandler extends ResultHandler {
 
   @Override
   public void handleButtonPress(int index) {
-    ProductParsedResult productResult = (ProductParsedResult) getResult();
+    String productID = getProductIDFromResult(getResult());
     switch (index) {
       case 0:
-        openProductSearch(productResult.getNormalizedProductID());
+        openProductSearch(productID);
         break;
       case 1:
-        webSearch(productResult.getNormalizedProductID());
+        webSearch(productID);
         break;
       case 2:
-        openURL(fillInCustomSearchURL(productResult.getNormalizedProductID()));
+        openURL(fillInCustomSearchURL(productID));
         break;
     }
+  }
+
+  private static String getProductIDFromResult(ParsedResult rawResult) {
+    if (rawResult instanceof ProductParsedResult) {
+      return ((ProductParsedResult) rawResult).getNormalizedProductID();
+    }
+    if (rawResult instanceof ExpandedProductParsedResult) {
+      return ((ExpandedProductParsedResult) rawResult).getRawText();
+    }
+    throw new IllegalArgumentException(rawResult.getClass().toString());
   }
 
   @Override

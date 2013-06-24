@@ -92,7 +92,7 @@ public final class ContactInfoGenerator implements GeneratorSource {
     output.append("MECARD:");
     maybeAppendMECARD(output, "N", name.replace(",", ""));
     maybeAppendMECARD(output, "ORG", company);
-    maybeAppendMECARD(output, "TEL", tel);
+    maybeAppendMECARD(output, "TEL", keepOnlyDigits(tel));
     maybeAppendMECARD(output, "URL", url);
     maybeAppendMECARD(output, "EMAIL", email);
     maybeAppendMECARD(output, "ADR", buildAddress(address, address2));
@@ -109,6 +109,10 @@ public final class ContactInfoGenerator implements GeneratorSource {
     maybeAppendMECARD(output, "NOTE", memoContents.toString());
     output.append(';');
     return output.toString();
+  }
+  
+  private static String keepOnlyDigits(String s) {
+    return s == null ? null : s.replaceAll("[^0-9]+", "");
   }
   
   private static String buildAddress(String address, String address2) {
@@ -166,7 +170,7 @@ public final class ContactInfoGenerator implements GeneratorSource {
   
   private String getNameField() throws GeneratorException {
     String input = name.getText();
-    if (input.length() < 1) {
+    if (input.isEmpty()) {
       throw new GeneratorException("Name must be at least 1 character.");
     }
     return input;
@@ -182,7 +186,7 @@ public final class ContactInfoGenerator implements GeneratorSource {
 
   private String getTelField() throws GeneratorException {
     String input = Validators.filterNumber(tel.getText());
-    if (input.length() < 1) {
+    if (input.isEmpty()) {
       return "";
     }
     Validators.validateNumber(input);
@@ -202,7 +206,7 @@ public final class ContactInfoGenerator implements GeneratorSource {
   
   private String getEmailField() throws GeneratorException {
     String input = email.getText();
-    if (input.length() < 1) {
+    if (input.isEmpty()) {
       return "";
     }
     Validators.validateEmail(input);

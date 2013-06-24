@@ -28,6 +28,7 @@ import com.google.zxing.Reader;
 import com.google.zxing.ReaderException;
 import com.google.zxing.Result;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
+import com.google.zxing.client.j2se.ImageReader;
 import com.google.zxing.common.GlobalHistogramBinarizer;
 import com.google.zxing.common.HybridBinarizer;
 
@@ -36,12 +37,17 @@ import com.google.zxing.multi.MultipleBarcodeReader;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
+import org.apache.commons.io.FileCleaningTracker;
 
 import java.awt.color.CMMException;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.HttpURLConnection;
@@ -55,12 +61,13 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.imageio.ImageIO;
 import javax.servlet.ServletConfig;
+import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServlet;
@@ -79,8 +86,8 @@ public final class DecodeServlet extends HttpServlet {
 
   // No real reason to let people upload more than a 2MB image
   private static final long MAX_IMAGE_SIZE = 2000000L;
-  // No real reason to deal with more than maybe 2 megapixels
-  private static final int MAX_PIXELS = 1 << 21;
+  // No real reason to deal with more than maybe 8.3 megapixels
+  private static final int MAX_PIXELS = 1 << 23;
   private static final byte[] REMAINDER_BUFFER = new byte[8192];
   private static final Map<DecodeHintType,Object> HINTS;
   private static final Map<DecodeHintType,Object> HINTS_PURE;
@@ -94,12 +101,36 @@ public final class DecodeServlet extends HttpServlet {
   }
 
   private DiskFileItemFactory diskFileItemFactory;
+  private Collection<String> blockedURLSubstrings;
 
   @Override
-  public void init(ServletConfig servletConfig) {
+  public void init(ServletConfig servletConfig) throws ServletException {
     Logger logger = Logger.getLogger("com.google.zxing");
-    logger.addHandler(new ServletContextLogHandler(servletConfig.getServletContext()));
-    diskFileItemFactory = new DiskFileItemFactory();
+    ServletContext context = servletConfig.getServletContext();
+    logger.addHandler(new ServletContextLogHandler(context));
+    File repository = (File) context.getAttribute("javax.servlet.context.tempdir");
+    FileCleaningTracker fileCleaningTracker = FileCleanerCleanup.getFileCleaningTracker(context);
+    diskFileItemFactory = new DiskFileItemFactory(1 << 16, repository);
+    diskFileItemFactory.setFileCleaningTracker(fileCleaningTracker);
+    
+    blockedURLSubstrings = new ArrayList<String>();
+    InputStream in = DecodeServlet.class.getResourceAsStream("/private/uri-block-substrings.txt");
+    if (in != null) {
+      try {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in, Charset.forName("UTF-8")));
+        try {
+          String line;
+          while ((line = reader.readLine()) != null) {
+            blockedURLSubstrings.add(line);
+          }
+        } finally {
+          reader.close();
+        }
+      } catch (IOException ioe) {
+        throw new ServletException(ioe);
+      }
+    }
+    log.info("Blocking URIs containing: " + blockedURLSubstrings);
   }
 
   @Override
@@ -114,19 +145,43 @@ public final class DecodeServlet extends HttpServlet {
     }
 
     imageURIString = imageURIString.trim();
-
-    if (!(imageURIString.startsWith("http://") || imageURIString.startsWith("https://"))) {
-      imageURIString = "http://" + imageURIString;
+    for (String substring : blockedURLSubstrings) {
+      if (imageURIString.contains(substring)) {
+        log.info("Disallowed URI " + imageURIString);        
+        response.sendRedirect("badurl.jspx");
+        return;
+      }
     }
 
-    URL imageURL;
+    URI imageURI;
     try {
-      imageURL = new URI(imageURIString).toURL();
+      imageURI = new URI(imageURIString);
+      // Assume http: if not specified
+      if (imageURI.getScheme() == null) {
+        imageURI = new URI("http://" + imageURIString);
+      }
     } catch (URISyntaxException urise) {
-      log.info("URI was not valid: " + imageURIString);
+      log.info("URI " + imageURIString + " was not valid: " + urise);
       response.sendRedirect("badurl.jspx");
       return;
-    } catch (MalformedURLException mue) {
+    }
+    
+    // Shortcut for data URI
+    if ("data".equals(imageURI.getScheme())) {
+      try {
+        BufferedImage image = ImageReader.readDataURIImage(imageURI);
+        processImage(image, request, response);
+      } catch (IOException ioe) {
+        log.info(ioe.toString());
+        response.sendRedirect("badurl.jspx");
+      }
+      return;
+    }
+    
+    URL imageURL;    
+    try {
+      imageURL = imageURI.toURL();
+    } catch (MalformedURLException ignored) {
       log.info("URI was not valid: " + imageURIString);
       response.sendRedirect("badurl.jspx");
       return;
@@ -135,7 +190,7 @@ public final class DecodeServlet extends HttpServlet {
     HttpURLConnection connection;
     try {
       connection = (HttpURLConnection) imageURL.openConnection();
-    } catch (IllegalArgumentException iae) {
+    } catch (IllegalArgumentException ignored) {
       log.info("URI could not be opened: " + imageURL);
       response.sendRedirect("badurl.jspx");
       return;
@@ -225,7 +280,7 @@ public final class DecodeServlet extends HttpServlet {
 
     // Parse the request
     try {
-      for (FileItem item : (List<FileItem>) upload.parseRequest(request)) {
+      for (FileItem item : upload.parseRequest(request)) {
         if (!item.isFormField()) {
           if (item.getSize() <= MAX_IMAGE_SIZE) {
             log.info("Decoding uploaded file");
@@ -282,6 +337,13 @@ public final class DecodeServlet extends HttpServlet {
       response.sendRedirect("badimage.jspx");
       return;
     }
+    
+    processImage(image, request, response);
+  }
+  
+  private static void processImage(BufferedImage image,
+                                   ServletRequest request,
+                                   HttpServletResponse response) throws IOException, ServletException {
 
     Reader reader = new MultiFormatReader();
     LuminanceSource source = new BufferedImageLuminanceSource(image);
@@ -290,56 +352,64 @@ public final class DecodeServlet extends HttpServlet {
     ReaderException savedException = null;
 
     try {
-      // Look for multiple barcodes
-      MultipleBarcodeReader multiReader = new GenericMultipleBarcodeReader(reader);
-      Result[] theResults = multiReader.decodeMultiple(bitmap, HINTS);
-      if (theResults != null) {
-        results.addAll(Arrays.asList(theResults));
-      }
-    } catch (ReaderException re) {
-      savedException = re;
-    }
 
-    if (results.isEmpty()) {
       try {
-        // Look for pure barcode
-        Result theResult = reader.decode(bitmap, HINTS_PURE);
-        if (theResult != null) {
-          results.add(theResult);
+        // Look for multiple barcodes
+        MultipleBarcodeReader multiReader = new GenericMultipleBarcodeReader(reader);
+        Result[] theResults = multiReader.decodeMultiple(bitmap, HINTS);
+        if (theResults != null) {
+          results.addAll(Arrays.asList(theResults));
         }
       } catch (ReaderException re) {
         savedException = re;
       }
-    }
-
-    if (results.isEmpty()) {
-      try {
-        // Look for normal barcode in photo
-        Result theResult = reader.decode(bitmap, HINTS);
-        if (theResult != null) {
-          results.add(theResult);
+  
+      if (results.isEmpty()) {
+        try {
+          // Look for pure barcode
+          Result theResult = reader.decode(bitmap, HINTS_PURE);
+          if (theResult != null) {
+            results.add(theResult);
+          }
+        } catch (ReaderException re) {
+          savedException = re;
         }
-      } catch (ReaderException re) {
-        savedException = re;
       }
-    }
-
-    if (results.isEmpty()) {
-      try {
-        // Try again with other binarizer
-        BinaryBitmap hybridBitmap = new BinaryBitmap(new HybridBinarizer(source));
-        Result theResult = reader.decode(hybridBitmap, HINTS);
-        if (theResult != null) {
-          results.add(theResult);
+  
+      if (results.isEmpty()) {
+        try {
+          // Look for normal barcode in photo
+          Result theResult = reader.decode(bitmap, HINTS);
+          if (theResult != null) {
+            results.add(theResult);
+          }
+        } catch (ReaderException re) {
+          savedException = re;
         }
-      } catch (ReaderException re) {
-        savedException = re;
       }
-    }
+  
+      if (results.isEmpty()) {
+        try {
+          // Try again with other binarizer
+          BinaryBitmap hybridBitmap = new BinaryBitmap(new HybridBinarizer(source));
+          Result theResult = reader.decode(hybridBitmap, HINTS);
+          if (theResult != null) {
+            results.add(theResult);
+          }
+        } catch (ReaderException re) {
+          savedException = re;
+        }
+      }
+  
+      if (results.isEmpty()) {
+        handleException(savedException, response);
+        return;
+      }
 
-    if (results.isEmpty()) {
-      handleException(savedException, response);
-      return;
+    } catch (RuntimeException re) {
+      // Call out unexpected errors in the log clearly
+      log.log(Level.WARNING, "Unexpected exception from library", re);
+      throw new ServletException(re);
     }
 
     String fullParameter = request.getParameter("full");

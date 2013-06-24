@@ -57,7 +57,7 @@ final class BenchmarkThread implements Runnable {
 
     List<BenchmarkItem> items = new ArrayList<BenchmarkItem>();
     walkTree(path, items);
-    Message message = Message.obtain(activity.handler, R.id.benchmark_done);
+    Message message = Message.obtain(activity.getHandler(), R.id.benchmark_done);
     message.obj = items;
     message.sendToTarget();
   }
@@ -105,7 +105,7 @@ final class BenchmarkThread implements Runnable {
         BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
         result = multiFormatReader.decodeWithState(bitmap);
         success = true;
-      } catch (ReaderException e) {
+      } catch (ReaderException ignored) {
         success = false;
       }
       now = Debug.threadCpuTimeNanos() - now;

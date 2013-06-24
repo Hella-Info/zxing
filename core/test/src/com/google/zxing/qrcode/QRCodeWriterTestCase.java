@@ -45,7 +45,7 @@ public final class QRCodeWriterTestCase extends Assert {
       // try starting with 'core' since the test base is often given as the project root
       file = new File("core/" + BASE_IMAGE_PATH + fileName);
     }
-    assertTrue("Please run from the 'core' directory", file.exists());
+    assertTrue("Please download and install test images, and run from the 'core' directory", file.exists());
     return ImageIO.read(file);
   }
 
@@ -110,9 +110,9 @@ public final class QRCodeWriterTestCase extends Assert {
     BitMatrix goldenResult = createMatrixFromImage(image);
     assertNotNull(goldenResult);
 
-    QRCodeWriter writer = new QRCodeWriter();
     Map<EncodeHintType,Object> hints = new EnumMap<EncodeHintType,Object>(EncodeHintType.class);
     hints.put(EncodeHintType.ERROR_CORRECTION, ecLevel);
+    QRCodeWriter writer = new QRCodeWriter();
     BitMatrix generatedResult = writer.encode(contents, BarcodeFormat.QR_CODE, resolution,
         resolution, hints);
 

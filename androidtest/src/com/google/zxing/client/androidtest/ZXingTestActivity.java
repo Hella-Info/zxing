@@ -24,9 +24,11 @@ import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.ContactsContract;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
@@ -40,12 +42,13 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.regex.Pattern;
 
 public final class ZXingTestActivity extends Activity {
 
   private static final String TAG = ZXingTestActivity.class.getSimpleName();
-  private static final int ABOUT_ID = Menu.FIRST;
   private static final String PACKAGE_NAME = ZXingTestActivity.class.getPackage().getName();
+  private static final Pattern SEMICOLON = Pattern.compile(";");
 
   @Override
   public void onCreate(Bundle icicle) {
@@ -70,21 +73,21 @@ public final class ZXingTestActivity extends Activity {
 
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
-    super.onCreateOptionsMenu(menu);
-    menu.add(0, ABOUT_ID, 0, R.string.about_menu).setIcon(android.R.drawable.ic_menu_info_details);
-    return true;
+    MenuInflater menuInflater = getMenuInflater();
+    menuInflater.inflate(R.menu.main, menu);
+    return super.onCreateOptionsMenu(menu);
   }
 
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
-    if (item.getItemId() == ABOUT_ID) {
+    if (item.getItemId() == R.id.menu_about) {
       int versionCode;
       String versionName;
       try {
         PackageInfo info = getPackageManager().getPackageInfo(PACKAGE_NAME, 0);
         versionCode = info.versionCode;
         versionName = info.versionName;
-      } catch (PackageManager.NameNotFoundException e) {
+      } catch (PackageManager.NameNotFoundException ignored) {
         versionCode = 0;
         versionName = "unknown";
       }
@@ -305,7 +308,7 @@ public final class ZXingTestActivity extends Activity {
     result.append("VERSION.SDK_INT=").append(Build.VERSION.SDK_INT).append('\n');
 
     String flattened = getFlattenedParams();
-    String[] params = flattened.split(";");
+    String[] params = SEMICOLON.split(flattened);
     Arrays.sort(params);
     for (String param : params) {
       result.append(param).append('\n');
@@ -318,10 +321,10 @@ public final class ZXingTestActivity extends Activity {
   }
 
   private static void writeStats(String resultString) {
+    File cameraParamsFile = new File(Environment.getExternalStorageDirectory().getPath() + "/CameraParameters.txt");
     Writer out = null;
     try {
-      out = new OutputStreamWriter(new FileOutputStream(new File("/sdcard/CameraParameters.txt")), 
-                                   Charset.forName("UTF-8"));
+      out = new OutputStreamWriter(new FileOutputStream(cameraParamsFile), Charset.forName("UTF-8"));
       out.write(resultString);
     } catch (IOException e) {
       Log.e(TAG, "Cannot write parameters file ", e);

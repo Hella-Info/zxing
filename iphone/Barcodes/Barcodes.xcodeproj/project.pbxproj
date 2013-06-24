@@ -357,7 +357,7 @@
 		29B97313FDCFA39411CA2CEA /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0450;
+				LastUpgradeCheck = 0460;
 			};
 			buildConfigurationList = C01FCF4E08A954540054247B /* Build configuration list for PBXProject "Barcodes" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -578,6 +578,7 @@
 					"-Objc",
 				);
 				PRODUCT_NAME = Barcodes;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = "armv7 armv7s";
 			};
 			name = Debug;
@@ -604,6 +605,7 @@
 				);
 				PRODUCT_NAME = Barcodes;
 				PROVISIONING_PROFILE = "";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 				VALID_ARCHS = "armv7 armv7s";
 			};
@@ -619,6 +621,7 @@
 				);
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GCC_C_LANGUAGE_STANDARD = c99;
+				GCC_THUMB_SUPPORT = NO;
 				"GCC_THUMB_SUPPORT[arch=armv6]" = NO;
 				GCC_VERSION = "";
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
@@ -661,6 +664,7 @@
 					"-Objc",
 				);
 				PRODUCT_NAME = Barcodes;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 				VALID_ARCHS = "armv7 armv7s";
 			};
@@ -677,6 +681,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_THUMB_SUPPORT = NO;
 				"GCC_THUMB_SUPPORT[arch=armv6]" = NO;
 				GCC_VERSION = "";
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
@@ -709,6 +714,7 @@
 				);
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GCC_C_LANGUAGE_STANDARD = c99;
+				GCC_THUMB_SUPPORT = NO;
 				"GCC_THUMB_SUPPORT[arch=armv6]" = NO;
 				GCC_VERSION = "";
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;

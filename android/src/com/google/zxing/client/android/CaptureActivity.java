@@ -17,6 +17,7 @@
 package com.google.zxing.client.android;
 
 import com.google.zxing.BarcodeFormat;
+import com.google.zxing.DecodeHintType;
 import com.google.zxing.Result;
 import com.google.zxing.ResultMetadataType;
 import com.google.zxing.ResultPoint;
@@ -34,8 +35,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -111,6 +110,7 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
   private String sourceUrl;
   private ScanFromWebPageManager scanFromWebPageManager;
   private Collection<BarcodeFormat> decodeFormats;
+  private Map<DecodeHintType,?> decodeHints;
   private String characterSet;
   private HistoryManager historyManager;
   private InactivityTimer inactivityTimer;
@@ -145,8 +145,6 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
     ambientLightManager = new AmbientLightManager(this);
 
     PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
-
-    showHelpOnFirstLaunch();
   }
 
   @Override
@@ -207,6 +205,7 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
         // Scan the formats the intent requested, and return the result to the calling activity.
         source = IntentSource.NATIVE_APP_INTENT;
         decodeFormats = DecodeFormatManager.parseDecodeFormats(intent);
+        decodeHints = DecodeHintManager.parseDecodeHints(intent);
 
         if (intent.hasExtra(Intents.Scan.WIDTH) && intent.hasExtra(Intents.Scan.HEIGHT)) {
           int width = intent.getIntExtra(Intents.Scan.WIDTH, 0);
@@ -239,6 +238,8 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
         Uri inputUri = Uri.parse(dataString);
         scanFromWebPageManager = new ScanFromWebPageManager(inputUri);
         decodeFormats = DecodeFormatManager.parseDecodeFormats(inputUri);
+        // Allow a sub-set of the hints to be specified by the caller.
+        decodeHints = DecodeHintManager.parseDecodeHints(inputUri);
 
       }
 
@@ -399,9 +400,10 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
    * A valid barcode has been found, so give an indication of success and show the results.
    *
    * @param rawResult The contents of the barcode.
+   * @param scaleFactor amount by which thumbnail was scaled
    * @param barcode   A greyscale bitmap of the camera data which was decoded.
    */
-  public void handleDecode(Result rawResult, Bitmap barcode) {
+  public void handleDecode(Result rawResult, Bitmap barcode, float scaleFactor) {
     inactivityTimer.onActivity();
     lastResult = rawResult;
     ResultHandler resultHandler = ResultHandlerFactory.makeResultHandler(this, rawResult);
@@ -411,7 +413,7 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
       historyManager.addHistoryItem(rawResult, resultHandler);
       // Then not from history, so beep/vibrate and we have an image to draw on
       beepManager.playBeepSoundAndVibrate();
-      drawResultPoints(barcode, rawResult);
+      drawResultPoints(barcode, scaleFactor, rawResult);
     }
 
     switch (source) {
@@ -445,9 +447,10 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
    * Superimpose a line for 1D or dots for 2D to highlight the key features of the barcode.
    *
    * @param barcode   A bitmap of the captured image.
+   * @param scaleFactor amount by which thumbnail was scaled
    * @param rawResult The decoded results which contains the points to draw.
    */
-  private void drawResultPoints(Bitmap barcode, Result rawResult) {
+  private void drawResultPoints(Bitmap barcode, float scaleFactor, Result rawResult) {
     ResultPoint[] points = rawResult.getResultPoints();
     if (points != null && points.length > 0) {
       Canvas canvas = new Canvas(barcode);
@@ -455,24 +458,30 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
       paint.setColor(getResources().getColor(R.color.result_points));
       if (points.length == 2) {
         paint.setStrokeWidth(4.0f);
-        drawLine(canvas, paint, points[0], points[1]);
+        drawLine(canvas, paint, points[0], points[1], scaleFactor);
       } else if (points.length == 4 &&
                  (rawResult.getBarcodeFormat() == BarcodeFormat.UPC_A ||
                   rawResult.getBarcodeFormat() == BarcodeFormat.EAN_13)) {
         // Hacky special case -- draw two lines, for the barcode and metadata
-        drawLine(canvas, paint, points[0], points[1]);
-        drawLine(canvas, paint, points[2], points[3]);
+        drawLine(canvas, paint, points[0], points[1], scaleFactor);
+        drawLine(canvas, paint, points[2], points[3], scaleFactor);
       } else {
         paint.setStrokeWidth(10.0f);
         for (ResultPoint point : points) {
-          canvas.drawPoint(point.getX(), point.getY(), paint);
+          canvas.drawPoint(scaleFactor * point.getX(), scaleFactor * point.getY(), paint);
         }
       }
     }
   }
 
-  private static void drawLine(Canvas canvas, Paint paint, ResultPoint a, ResultPoint b) {
-    canvas.drawLine(a.getX(), a.getY(), b.getX(), b.getY(), paint);
+  private static void drawLine(Canvas canvas, Paint paint, ResultPoint a, ResultPoint b, float scaleFactor) {
+    if (a != null && b != null) {
+      canvas.drawLine(scaleFactor * a.getX(), 
+                      scaleFactor * a.getY(), 
+                      scaleFactor * b.getX(), 
+                      scaleFactor * b.getY(), 
+                      paint);
+    }
   }
 
   // Put up our own UI for how to handle the decoded contents.
@@ -581,18 +590,24 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
                                                   DEFAULT_INTENT_RESULT_DURATION_MS);
     }
 
-    // Since this message will only be shown for a second, just tell the user what kind of
-    // barcode was found (e.g. contact info) rather than the full contents, which they won't
-    // have time to read.
     if (resultDurationMS > 0) {
-      statusView.setText(getString(resultHandler.getDisplayTitle()));
+      String rawResultString = String.valueOf(rawResult);
+      if (rawResultString.length() > 32) {
+        rawResultString = rawResultString.substring(0, 32) + " ...";
+      }
+      statusView.setText(getString(resultHandler.getDisplayTitle()) + " : " + rawResultString);
     }
 
     if (copyToClipboard && !resultHandler.areContentsSecure()) {
       ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
       CharSequence text = resultHandler.getDisplayContents();
       if (text != null) {
-        clipboard.setText(text);
+        try {
+          clipboard.setText(text);
+        } catch (NullPointerException npe) {
+          // Some kind of bug inside the clipboard implementation, not due to null input
+          Log.w(TAG, "Clipboard bug", npe);
+        }
       }
     }
 
@@ -660,33 +675,6 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
     }
   }
 
-  /**
-   * We want the help screen to be shown automatically the first time a new version of the app is
-   * run. The easiest way to do this is to check android:versionCode from the manifest, and compare
-   * it to a value stored as a preference.
-   */
-  private boolean showHelpOnFirstLaunch() {
-    try {
-      PackageInfo info = getPackageManager().getPackageInfo(PACKAGE_NAME, 0);
-      int currentVersion = info.versionCode;
-      SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-      int lastVersion = prefs.getInt(PreferencesActivity.KEY_HELP_VERSION_SHOWN, 0);
-      if (currentVersion > lastVersion) {
-        prefs.edit().putInt(PreferencesActivity.KEY_HELP_VERSION_SHOWN, currentVersion).commit();
-        Intent intent = new Intent(this, HelpActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
-        // Show the default page on a clean install, and the what's new page on an upgrade.
-        String page = lastVersion == 0 ? HelpActivity.DEFAULT_PAGE : HelpActivity.WHATS_NEW_PAGE;
-        intent.putExtra(HelpActivity.REQUESTED_PAGE_KEY, page);
-        startActivity(intent);
-        return true;
-      }
-    } catch (PackageManager.NameNotFoundException e) {
-      Log.w(TAG, e);
-    }
-    return false;
-  }
-
   private void initCamera(SurfaceHolder surfaceHolder) {
     if (surfaceHolder == null) {
       throw new IllegalStateException("No SurfaceHolder provided");
@@ -699,7 +687,7 @@ public final class CaptureActivity extends Activity implements SurfaceHolder.Cal
       cameraManager.openDriver(surfaceHolder);
       // Creating the handler starts the preview, which can also throw a RuntimeException.
       if (handler == null) {
-        handler = new CaptureActivityHandler(this, decodeFormats, characterSet, cameraManager);
+        handler = new CaptureActivityHandler(this, decodeFormats, decodeHints, characterSet, cameraManager);
       }
       decodeOrStoreSavedBitmap(null, null);
     } catch (IOException ioe) {

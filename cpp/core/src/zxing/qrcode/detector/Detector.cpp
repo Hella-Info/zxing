@@ -27,16 +27,14 @@
 #include <zxing/qrcode/Version.h>
 #include <zxing/common/GridSampler.h>
 #include <zxing/DecodeHints.h>
-#include <zxing/common/detector/math_utils.h>
+#include <zxing/common/detector/MathUtils.h>
 #include <sstream>
 #include <cstdlib>
 
-namespace math_utils = zxing::common::detector::math_utils;
-
 using std::ostringstream;
+using std::abs;
 using std::min;
 using std::max;
-using std::isnan;
 using zxing::qrcode::Detector;
 using zxing::Ref;
 using zxing::BitMatrix;
@@ -44,6 +42,13 @@ using zxing::ResultPointCallback;
 using zxing::DetectorResult;
 using zxing::PerspectiveTransform;
 using zxing::qrcode::AlignmentPattern;
+using zxing::common::detector::MathUtils;
+
+// VC++
+using zxing::DecodeHints;
+using zxing::qrcode::FinderPatternFinder;
+using zxing::qrcode::FinderPatternInfo;
+using zxing::ResultPoint;
 
 Detector::Detector(Ref<BitMatrix> image) :
   image_(image) {
@@ -100,6 +105,7 @@ Ref<DetectorResult> Detector::processFinderPatternInfo(Ref<FinderPatternInfo> in
         alignmentPattern = findAlignmentInRegion(moduleSize, estAlignmentX, estAlignmentY, (float)i);
         break;
       } catch (zxing::ReaderException const& re) {
+        (void)re;
         // try next round
       }
     }
@@ -111,7 +117,7 @@ Ref<DetectorResult> Detector::processFinderPatternInfo(Ref<FinderPatternInfo> in
 
   Ref<PerspectiveTransform> transform = createTransform(topLeft, topRight, bottomLeft, alignmentPattern, dimension);
   Ref<BitMatrix> bits(sampleGrid(image_, dimension, transform));
-  std::vector<Ref<ResultPoint> > points(alignmentPattern == 0 ? 3 : 4);
+  ArrayRef< Ref<ResultPoint> > points(new Array< Ref<ResultPoint> >(alignmentPattern == 0 ? 3 : 4));
   points[0].reset(bottomLeft);
   points[1].reset(topLeft);
   points[2].reset(topRight);
@@ -159,9 +165,9 @@ Ref<BitMatrix> Detector::sampleGrid(Ref<BitMatrix> image, int dimension, Ref<Per
 int Detector::computeDimension(Ref<ResultPoint> topLeft, Ref<ResultPoint> topRight, Ref<ResultPoint> bottomLeft,
                                float moduleSize) {
   int tltrCentersDimension =
-    math_utils::round(ResultPoint::distance(topLeft, topRight) / moduleSize);
+    MathUtils::round(ResultPoint::distance(topLeft, topRight) / moduleSize);
   int tlblCentersDimension =
-    math_utils::round(ResultPoint::distance(topLeft, bottomLeft) / moduleSize);
+    MathUtils::round(ResultPoint::distance(topLeft, bottomLeft) / moduleSize);
   int dimension = ((tltrCentersDimension + tlblCentersDimension) >> 1) + 7;
   switch (dimension & 0x03) { // mod 4
   case 0:
@@ -189,10 +195,10 @@ float Detector::calculateModuleSizeOneWay(Ref<ResultPoint> pattern, Ref<ResultPo
                                                           (int)otherPattern->getX(), (int)otherPattern->getY());
   float moduleSizeEst2 = sizeOfBlackWhiteBlackRunBothWays((int)otherPattern->getX(), (int)otherPattern->getY(),
                                                           (int)pattern->getX(), (int)pattern->getY());
-  if (isnan(moduleSizeEst1)) {
+  if (zxing::isnan(moduleSizeEst1)) {
     return moduleSizeEst2;
   }
-  if (isnan(moduleSizeEst2)) {
+  if (zxing::isnan(moduleSizeEst2)) {
     return moduleSizeEst1;
   }
   // Average them, and divide by 7 since we've counted the width of 3 black modules,
@@ -262,7 +268,7 @@ float Detector::sizeOfBlackWhiteBlackRun(int fromX, int fromY, int toX, int toY)
     // Does current pixel mean we have moved white to black or vice versa?
     if (!((state == 1) ^ image_->get(realX, realY))) {
       if (state == 2) {
-        return math_utils::distance(x, y, fromX, fromY);
+        return MathUtils::distance(x, y, fromX, fromY);
       }
       state++;
     }
@@ -280,10 +286,10 @@ float Detector::sizeOfBlackWhiteBlackRun(int fromX, int fromY, int toX, int toY)
   // is "white" so this last point at (toX+xStep,toY) is the right ending. This is really a
   // small approximation; (toX+xStep,toY+yStep) might be really correct. Ignore this.
   if (state == 2) {
-    return math_utils::distance(toX + xstep, toY, fromX, fromY);
+    return MathUtils::distance(toX + xstep, toY, fromX, fromY);
   }
   // else we didn't find even black-white-black; no estimate is really possible
-  return NAN;
+  return nan();
 }
 
 Ref<AlignmentPattern> Detector::findAlignmentInRegion(float overallEstModuleSize, int estAlignmentX, int estAlignmentY,

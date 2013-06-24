@@ -16,7 +16,6 @@
 
 package com.google.zxing.integration.android;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -97,7 +96,7 @@ import android.util.Log;
  * <h2>Enabling experimental barcode formats</h2>
  *
  * <p>Some formats are not enabled by default even when scanning with {@link #ALL_CODE_TYPES}, such as
- * {@link com.google.zxing.BarcodeFormat#PDF_417}. Use {@link #initiateScan(java.util.Collection)} with
+ * PDF417. Use {@link #initiateScan(java.util.Collection)} with
  * a collection containing the names of formats to scan for explicitly, like "PDF_417", to use such
  * formats.</p>
  *
@@ -133,9 +132,9 @@ public class IntentIntegrator {
   
   public static final List<String> TARGET_BARCODE_SCANNER_ONLY = Collections.singletonList(BS_PACKAGE);
   public static final List<String> TARGET_ALL_KNOWN = list(
-          BS_PACKAGE, // Barcode Scanner
-          BSPLUS_PACKAGE, // Barcode Scanner+
-          BSPLUS_PACKAGE + ".simple" // Barcode Scanner+ Simple
+          BSPLUS_PACKAGE,             // Barcode Scanner+
+          BSPLUS_PACKAGE + ".simple", // Barcode Scanner+ Simple
+          BS_PACKAGE                  // Barcode Scanner          
           // What else supports this intent?
       );
   
@@ -208,20 +207,8 @@ public class IntentIntegrator {
   public Collection<String> getTargetApplications() {
     return targetApplications;
   }
-
-  /**
-   * @deprecated call {@link #setTargetApplications(List)}
-   */
-  @Deprecated
-  public void setTargetApplications(Collection<String> targetApplications) {
-    List<String> list = new ArrayList<String>(targetApplications.size());
-    for (String app : targetApplications) {
-      list.add(app);
-    }
-    setTargetApplications(list);
-  }
   
-  public void setTargetApplications(List<String> targetApplications) {
+  public final void setTargetApplications(List<String> targetApplications) {
     if (targetApplications.isEmpty()) {
       throw new IllegalArgumentException("No target applications");
     }
@@ -236,14 +223,14 @@ public class IntentIntegrator {
     return moreExtras;
   }
 
-  public void addExtra(String key, Object value) {
+  public final void addExtra(String key, Object value) {
     moreExtras.put(key, value);
   }
 
   /**
    * Initiates a scan for all known barcode types.
    */
-  public AlertDialog initiateScan() {
+  public final AlertDialog initiateScan() {
     return initiateScan(ALL_CODE_TYPES);
   }
 
@@ -255,7 +242,7 @@ public class IntentIntegrator {
    * @return the {@link AlertDialog} that was shown to the user prompting them to download the app
    *   if a prompt was needed, or null otherwise
    */
-  public AlertDialog initiateScan(Collection<String> desiredBarcodeFormats) {
+  public final AlertDialog initiateScan(Collection<String> desiredBarcodeFormats) {
     Intent intentScan = new Intent(BS_PACKAGE + ".SCAN");
     intentScan.addCategory(Intent.CATEGORY_DEFAULT);
 
@@ -285,8 +272,7 @@ public class IntentIntegrator {
   }
 
   /**
-   * Start an activity.<br>
-   * This method is defined to allow different methods of activity starting for
+   * Start an activity. This method is defined to allow different methods of activity starting for
    * newer versions of Android and for compatibility library.
    *
    * @param intent Intent to start.
@@ -302,14 +288,23 @@ public class IntentIntegrator {
     PackageManager pm = activity.getPackageManager();
     List<ResolveInfo> availableApps = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
     if (availableApps != null) {
-      for (ResolveInfo availableApp : availableApps) {
-        String packageName = availableApp.activityInfo.packageName;
-        if (targetApplications.contains(packageName)) {
-          return packageName;
+      for (String targetApp : targetApplications) {
+        if (contains(availableApps, targetApp)) {
+          return targetApp;
         }
       }
     }
     return null;
+  }
+  
+  private static boolean contains(Iterable<ResolveInfo> availableApps, String targetApp) {
+    for (ResolveInfo availableApp : availableApps) {
+      String packageName = availableApp.activityInfo.packageName;
+      if (targetApp.equals(packageName)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private AlertDialog showDownloadDialog() {
@@ -371,7 +366,7 @@ public class IntentIntegrator {
    * Defaults to type "TEXT_TYPE".
    * @see #shareText(CharSequence, CharSequence)
    */
-  public AlertDialog shareText(CharSequence text) {
+  public final AlertDialog shareText(CharSequence text) {
     return shareText(text, "TEXT_TYPE");
   }
 
@@ -384,7 +379,7 @@ public class IntentIntegrator {
    * @return the {@link AlertDialog} that was shown to the user prompting them to download the app
    *   if a prompt was needed, or null otherwise
    */
-  public AlertDialog shareText(CharSequence text, CharSequence type) {
+  public final AlertDialog shareText(CharSequence text, CharSequence type) {
     Intent intent = new Intent();
     intent.addCategory(Intent.CATEGORY_DEFAULT);
     intent.setAction(BS_PACKAGE + ".ENCODE");

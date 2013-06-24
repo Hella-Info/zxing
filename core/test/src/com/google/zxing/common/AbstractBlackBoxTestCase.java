@@ -114,7 +114,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
   }
 
   protected final File[] getImageFiles() {
-    assertTrue("Please run from the 'core' directory", testBase.exists());
+    assertTrue("Please download and install test images, and run from the 'core' directory", testBase.exists());
     return testBase.listFiles(IMAGE_NAME_FILTER);
   }
 
@@ -179,7 +179,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
           } else {
             misreadCounts[x]++;
           }
-        } catch (ReaderException re) {
+        } catch (ReaderException ignored) {
           log.fine(String.format("could not read at rotation %f", rotation));
         }
         try {
@@ -188,7 +188,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
           } else {
             tryHaderMisreadCounts[x]++;
           }
-        } catch (ReaderException re) {
+        } catch (ReaderException ignored) {
           log.fine(String.format("could not read at rotation %f w/TH", rotation));
         }
       }
@@ -296,7 +296,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
     return true;
   }
 
-  private static String readFileAsString(File file, Charset charset) throws IOException {
+  protected static String readFileAsString(File file, Charset charset) throws IOException {
     StringBuilder result = new StringBuilder((int) file.length());
     InputStreamReader reader = new InputStreamReader(new FileInputStream(file), charset);
     try {
@@ -308,7 +308,12 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
     } finally {
       reader.close();
     }
-    return result.toString();
+    String stringContents = result.toString();
+    if (stringContents.endsWith("\n")) {
+      log.warning("String contents of file " + file + " end with a newline. " +
+                  "This may not be intended and cause a test failure");
+    }
+    return stringContents;
   }
 
   protected static BufferedImage rotateImage(BufferedImage original, float degrees) {
